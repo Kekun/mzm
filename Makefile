@@ -102,6 +102,7 @@ GBAFIX = $(TOOLS_DIR)/gbafix/gbafix
 PYTHON = python3
 EXTRACTOR = $(PYTHON) $(TOOLS_DIR)/extractor.py
 PREPROC = $(PYTHON) $(TOOLS_DIR)/preproc.py
+CLIPDATA = $(PYTHON) $(TOOLS_DIR)/tiledconverter/clipdata.py
 
 # Flags
 ASFLAGS += -mcpu=arm7tdmi
@@ -184,6 +185,51 @@ ifeq ($(DEBUG),1)
 	$Q$(EXTRACTOR) -d
 endif
 	$(MAKE) -C nes_metroid extract REGION=$(REGION)
+
+.PHONY: tiledrooms tiledclipdata
+
+TILEDCONVERTER_SRC = \
+	tools/tiledconverter/src/tc_compression.c \
+	tools/tiledconverter/src/tc_enum_nick.c \
+	tools/tiledconverter/src/tc_room_props.c \
+	tools/tiledconverter/src/tc_stream.c \
+	tools/tiledconverter/src/tc_string.c \
+	tools/tiledconverter/src/tc_template.c \
+	tools/tiledconverter/src/tc_tile_layer.c
+
+ROOMS_SRC = \
+	src/data/rooms_data.c \
+	src/data/default_background_data.c \
+	$(wildcard src/data/rooms/**.c) \
+	$(wildcard src/data/rooms/**/**.c) \
+	$(wildcard src/data/tilesets/**.c) \
+	$(wildcard src/data/tilesets/**/**.c)
+
+MZM2TILED_SRC = \
+	tools/tiledconverter/src/mzm2tiled.c \
+	$(TILEDCONVERTER_SRC) \
+	$(ROOMS_SRC)
+
+# FIXME Make it rebuildable when the included files changed too, see https://make.mad-scientist.net/papers/advanced-auto-dependency-generation/
+tools/tiledconverter/mzm2tiled: $(MZM2TILED_SRC)
+	$Q$(HOSTCC) -g -Iinclude/ -Itools/tiledconverter/include/ -o $@ $(MZM2TILED_SRC)
+
+# FIXME Set the output directory as a parameter of mzm2tiled
+tiledrooms: tools/tiledconverter/mzm2tiled
+	$Qtools/tiledconverter/mzm2tiled
+
+# FIXME Make the conversion script take the header file as a parameter
+tiled/clipdata.tsj: include/constants/clipdata.h $(TOOLS_DIR)/tiledconverter/clipdata.py
+	$Q$(MKDIR) tiled
+	$Q$(CLIPDATA) > $@
+
+tiled/clipdata.png: $(TOOLS_DIR)/tiledconverter/clipdata.png
+	$Q$(MKDIR) tiled
+	$Qcp $< $@
+
+tiledclipdata: tiled/clipdata.tsj tiled/clipdata.png
+
+tiled: tiledrooms tiledclipdata
 
 .PHONY: clean
 clean: clean-tools tidy
